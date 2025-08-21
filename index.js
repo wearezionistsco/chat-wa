@@ -1,5 +1,4 @@
 const { Client, LocalAuth } = require("whatsapp-web.js");
-const fs = require("fs");
 
 // ================= CONFIG =================
 const ADMIN = "6287756266682@c.us"; // ganti dengan nomor adminmu
@@ -9,14 +8,8 @@ const EXCLUDED_NUMBERS = [
   "6289876543210@c.us"  // contoh
 ];
 
-let IZIN_TELEPON = [];
-let userState = {};
-const IZIN_FILE = "./izin.json";
-
-// Load izin dari file
-if (fs.existsSync(IZIN_FILE)) {
-  IZIN_TELEPON = JSON.parse(fs.readFileSync(IZIN_FILE, "utf-8"));
-}
+let IZIN_TELEPON = []; // daftar nomor yang diizinkan telepon
+let userState = {};   // simpan state menu per user
 
 // ================= MENU =================
 const menuUtama = `
@@ -50,7 +43,7 @@ const menuPesanPribadi = `
 // ================= CLIENT =================
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: "./.wwebjs_auth" // session disimpan di volume Railway
+    dataPath: "./.wwebjs_auth" // session disimpan, aman dengan Railway volume
   }),
   puppeteer: {
     headless: true,
@@ -59,24 +52,17 @@ const client = new Client({
   },
 });
 
-let qrSent = false;
-
-// QR Code dikirim ke admin hanya kalau session kosong
+// QR Code muncul di Railway log
 client.on("qr", (qr) => {
-  if (qrSent) return;
-  qrSent = true;
-
   const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-  console.log("🔑 QR Code dibuat, link:", qrLink);
-
-  client.sendMessage(ADMIN, `🔑 Scan QR untuk login bot:\n${qrLink}`)
-    .then(() => console.log("✅ QR terkirim ke admin"))
-    .catch(err => console.error("❌ Gagal kirim QR ke admin:", err));
+  console.log("🔑 Scan QR lewat link ini (buka di browser):");
+  console.log(qrLink);
 });
 
+// Bot siap
 client.on("ready", () => {
   console.log("✅ Bot WhatsApp aktif!");
-  qrSent = false;
+  client.sendMessage(ADMIN, "✅ Bot sudah online dan siap dipakai.");
 });
 
 // ================= HANDLER CHAT =================
@@ -84,6 +70,7 @@ client.on("message", async (msg) => {
   const chat = msg.body.trim();
   const from = msg.from;
 
+  // 🚫 Skip jika nomor ada di excluded
   if (EXCLUDED_NUMBERS.includes(from)) {
     console.log("Chat dilewati dari:", from);
     return;
@@ -135,17 +122,13 @@ client.on("message", async (msg) => {
   if (from === ADMIN) {
     if (chat.startsWith("IZIN ")) {
       const nomor = chat.replace("IZIN ", "").trim() + "@c.us";
-      if (!IZIN_TELEPON.includes(nomor)) {
-        IZIN_TELEPON.push(nomor);
-        fs.writeFileSync(IZIN_FILE, JSON.stringify(IZIN_TELEPON));
-      }
+      if (!IZIN_TELEPON.includes(nomor)) IZIN_TELEPON.push(nomor);
       client.sendMessage(nomor, "✅ Kamu diizinkan telepon admin.");
       return msg.reply(`Nomor ${nomor} diizinkan telepon.`);
     }
     if (chat.startsWith("TOLAK ")) {
       const nomor = chat.replace("TOLAK ", "").trim() + "@c.us";
       IZIN_TELEPON = IZIN_TELEPON.filter((n) => n !== nomor);
-      fs.writeFileSync(IZIN_FILE, JSON.stringify(IZIN_TELEPON));
       client.sendMessage(nomor, "❌ Izin telepon admin dicabut.");
       return msg.reply(`Nomor ${nomor} ditolak telepon.`);
     }
