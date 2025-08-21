@@ -1,7 +1,5 @@
-# Gunakan Node.js
 FROM node:18-slim
 
-# Install Chromium & dependencies
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \
@@ -24,23 +22,15 @@ RUN apt-get update && apt-get install -y \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Set env untuk puppeteer
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Buat folder app
 WORKDIR /app
 
-# Copy package.json
 COPY package.json ./
-
-# Install deps
 RUN npm install
 
-# Copy source code
 COPY . .
 
-# Expose port (tidak dipakai, tapi Railway butuh)
 EXPOSE 3000
 
-# Jalankan bot
 CMD ["npm", "start"]
