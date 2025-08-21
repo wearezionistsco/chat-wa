@@ -62,12 +62,14 @@ client.on("qr", (qr) => {
 // Bot siap
 client.on("ready", () => {
   console.log("✅ Bot WhatsApp aktif!");
-  client.sendMessage(ADMIN, "✅ Bot sudah online dan siap dipakai.");
+  setTimeout(() => {
+    client.sendMessage(ADMIN, "✅ Bot sudah online dan siap dipakai.");
+  }, 5000); // kasih delay biar tidak error getChat
 });
 
 // ================= HANDLER CHAT =================
 client.on("message", async (msg) => {
-  const chat = msg.body.trim();
+  const chat = msg.body.trim().toLowerCase();
   const from = msg.from;
 
   // 🚫 Skip jika nomor ada di excluded
@@ -76,8 +78,14 @@ client.on("message", async (msg) => {
     return;
   }
 
+  // Kalau pertama kali chat → langsung tampil menu
+  if (!userState[from]) {
+    userState[from] = "menu";
+    return msg.reply(menuUtama);
+  }
+
   // --- MENU UTAMA ---
-  if (chat === "menu" || chat === "0") {
+  if (chat === "0" || chat === "menu") {
     userState[from] = "menu";
     return msg.reply(menuUtama);
   }
@@ -97,42 +105,45 @@ client.on("message", async (msg) => {
     if (["1","2","3","4","5","6"].includes(chat)) {
       const nominal = ["150","200","300","500","1/2","1"][parseInt(chat)-1];
       userState[from] = "menu";
-      return msg.reply(`✅ TOP UP ${nominal} diproses. Terima kasih!`);
+      return msg.reply(`✅ TOP UP ${nominal} diproses. Terima kasih!\n\n${menuUtama}`);
     }
     if (chat === "0") {
       userState[from] = "menu";
       return msg.reply(menuUtama);
     }
+    return msg.reply("❌ Pilihan tidak valid.\n\n" + menuTopUp);
   }
 
   // --- SUB MENU PESAN PRIBADI ---
   if (userState[from] === "pesan") {
-    if (chat === "1") return msg.reply("📌 Bon dicatat.");
-    if (chat === "2") return msg.reply("📌 Gadai dicatat.");
-    if (chat === "3") return msg.reply("📌 HP dicatat.");
-    if (chat === "4") return msg.reply("📌 Barang lain dicatat.");
-    if (chat === "5") return msg.reply("📞 Permintaan telepon admin dikirim.");
+    if (chat === "1") {
+      userState[from] = "menu";
+      return msg.reply("📌 Bon dicatat.\n\n" + menuUtama);
+    }
+    if (chat === "2") {
+      userState[from] = "menu";
+      return msg.reply("📌 Gadai dicatat.\n\n" + menuUtama);
+    }
+    if (chat === "3") {
+      userState[from] = "menu";
+      return msg.reply("📌 HP dicatat.\n\n" + menuUtama);
+    }
+    if (chat === "4") {
+      userState[from] = "menu";
+      return msg.reply("📌 Barang lain dicatat.\n\n" + menuUtama);
+    }
+    if (chat === "5") {
+      client.sendMessage(ADMIN, `📞 User ${from} minta izin telepon.`);
+      userState[from] = "menu";
+      return msg.reply("📞 Permintaan telepon admin dikirim.\n\n" + menuUtama);
+    }
     if (chat === "0") {
       userState[from] = "menu";
       return msg.reply(menuUtama);
     }
+    return msg.reply("❌ Pilihan tidak valid.\n\n" + menuPesanPribadi);
   }
 
-  // --- ADMIN IZIN / TOLAK TELEPON ---
-  if (from === ADMIN) {
-    if (chat.startsWith("IZIN ")) {
-      const nomor = chat.replace("IZIN ", "").trim() + "@c.us";
-      if (!IZIN_TELEPON.includes(nomor)) IZIN_TELEPON.push(nomor);
-      client.sendMessage(nomor, "✅ Kamu diizinkan telepon admin.");
-      return msg.reply(`Nomor ${nomor} diizinkan telepon.`);
-    }
-    if (chat.startsWith("TOLAK ")) {
-      const nomor = chat.replace("TOLAK ", "").trim() + "@c.us";
-      IZIN_TELEPON = IZIN_TELEPON.filter((n) => n !== nomor);
-      client.sendMessage(nomor, "❌ Izin telepon admin dicabut.");
-      return msg.reply(`Nomor ${nomor} ditolak telepon.`);
-    }
-  }
 });
 
 // ================= HANDLER PANGGILAN =================
