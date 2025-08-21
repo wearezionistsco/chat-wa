@@ -11,7 +11,12 @@ const EXCLUDED_NUMBERS = [
 
 let IZIN_TELEPON = [];
 let userState = {};
-let qrSent = false; // flag supaya QR tidak dikirim berulang
+const IZIN_FILE = "./izin.json";
+
+// Load izin dari file
+if (fs.existsSync(IZIN_FILE)) {
+  IZIN_TELEPON = JSON.parse(fs.readFileSync(IZIN_FILE, "utf-8"));
+}
 
 // ================= MENU =================
 const menuUtama = `
@@ -42,37 +47,27 @@ const menuPesanPribadi = `
 0. Kembali
 `;
 
-// ================= SIMPAN IZIN TELEPON =================
-function saveIzin() {
-  fs.writeFileSync("izin.json", JSON.stringify(IZIN_TELEPON));
-}
-
-function loadIzin() {
-  if (fs.existsSync("izin.json")) {
-    IZIN_TELEPON = JSON.parse(fs.readFileSync("izin.json"));
-  }
-}
-loadIzin();
-
 // ================= CLIENT =================
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: "/app/session" }),
+  authStrategy: new LocalAuth({
+    dataPath: "./.wwebjs_auth" // session disimpan di volume Railway
+  }),
   puppeteer: {
     headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/google-chrome-stable",
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium",
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   },
 });
 
-// ================= QR HANDLER =================
+let qrSent = false;
+
+// QR Code dikirim ke admin hanya kalau session kosong
 client.on("qr", (qr) => {
-  if (qrSent) return; // sudah pernah kirim? skip
+  if (qrSent) return;
   qrSent = true;
 
   const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-
-  console.log("🔑 QR Code baru dibuat!");
-  console.log("👉 Link QR:", qrLink);
+  console.log("🔑 QR Code dibuat, link:", qrLink);
 
   client.sendMessage(ADMIN, `🔑 Scan QR untuk login bot:\n${qrLink}`)
     .then(() => console.log("✅ QR terkirim ke admin"))
@@ -81,19 +76,14 @@ client.on("qr", (qr) => {
 
 client.on("ready", () => {
   console.log("✅ Bot WhatsApp aktif!");
-  qrSent = false; // reset flag setelah login sukses
+  qrSent = false;
 });
 
 // ================= HANDLER CHAT =================
 client.on("message", async (msg) => {
-  const chat = msg.body.trim().toLowerCase();
+  const chat = msg.body.trim();
   const from = msg.from;
 
-  if (!userState[from]) userState[from] = "menu"; // default state
-
-  console.log(`[MSG] From: ${from} | Body: ${chat} | State: ${userState[from]}`);
-
-  // 🚫 Skip jika nomor ada di excluded
   if (EXCLUDED_NUMBERS.includes(from)) {
     console.log("Chat dilewati dari:", from);
     return;
@@ -134,10 +124,7 @@ client.on("message", async (msg) => {
     if (chat === "2") return msg.reply("📌 Gadai dicatat.");
     if (chat === "3") return msg.reply("📌 HP dicatat.");
     if (chat === "4") return msg.reply("📌 Barang lain dicatat.");
-    if (chat === "5") {
-      client.sendMessage(ADMIN, `📞 ${from} minta izin telepon.`);
-      return msg.reply("📞 Permintaan telepon admin dikirim.");
-    }
+    if (chat === "5") return msg.reply("📞 Permintaan telepon admin dikirim.");
     if (chat === "0") {
       userState[from] = "menu";
       return msg.reply(menuUtama);
@@ -146,17 +133,19 @@ client.on("message", async (msg) => {
 
   // --- ADMIN IZIN / TOLAK TELEPON ---
   if (from === ADMIN) {
-    if (chat.startsWith("izin ")) {
-      const nomor = chat.replace("izin ", "").trim() + "@c.us";
-      if (!IZIN_TELEPON.includes(nomor)) IZIN_TELEPON.push(nomor);
-      saveIzin();
+    if (chat.startsWith("IZIN ")) {
+      const nomor = chat.replace("IZIN ", "").trim() + "@c.us";
+      if (!IZIN_TELEPON.includes(nomor)) {
+        IZIN_TELEPON.push(nomor);
+        fs.writeFileSync(IZIN_FILE, JSON.stringify(IZIN_TELEPON));
+      }
       client.sendMessage(nomor, "✅ Kamu diizinkan telepon admin.");
       return msg.reply(`Nomor ${nomor} diizinkan telepon.`);
     }
-    if (chat.startsWith("tolak ")) {
-      const nomor = chat.replace("tolak ", "").trim() + "@c.us";
+    if (chat.startsWith("TOLAK ")) {
+      const nomor = chat.replace("TOLAK ", "").trim() + "@c.us";
       IZIN_TELEPON = IZIN_TELEPON.filter((n) => n !== nomor);
-      saveIzin();
+      fs.writeFileSync(IZIN_FILE, JSON.stringify(IZIN_TELEPON));
       client.sendMessage(nomor, "❌ Izin telepon admin dicabut.");
       return msg.reply(`Nomor ${nomor} ditolak telepon.`);
     }
